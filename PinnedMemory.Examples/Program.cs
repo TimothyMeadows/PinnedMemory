@@ -54,10 +54,11 @@ namespace PinnedMemory.Examples
                 Console.WriteLine(BitConverter.ToString(pinPopulated.ToArray()));
             }
 
-            // This second write should be all zero's as the memory has been freed
-            Console.WriteLine(BitConverter.ToString(pinPopulated.ToArray()));
+            // This is an example of using a char array.
+            using var cawPin = new PinnedMemory<char>(new [] { 'c', 'a', 'w', ' ', 'c', 'a', 'w', ' ', 'c', 'a', 'w' }, false);
 
-            
+            // This pin will be freed when the program exits.
+            Console.WriteLine(cawPin.ToArray());
         }
     }
 }

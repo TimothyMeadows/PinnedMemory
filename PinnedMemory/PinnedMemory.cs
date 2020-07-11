@@ -20,6 +20,7 @@ namespace PinnedMemory
             {
                 {typeof(sbyte), sizeof(sbyte)},
                 {typeof(byte), sizeof(byte)},
+                {typeof(char), sizeof(char)},
                 {typeof(short), sizeof(short)},
                 {typeof(ushort), sizeof(ushort)},
                 {typeof(int), sizeof(int)},

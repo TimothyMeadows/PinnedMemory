@@ -2,6 +2,22 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Authors>Timothy D Meadows II</Authors>
+    <Company>Timothy D Meadows II</Company>
+    <Description>PinnedMemory is a cross platform method for creating, and accessing pinned, and locked memory for Windows, Mac, and Linux operating systems in .NET Core.</Description>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageProjectUrl>https://github.com/TimothyMeadows/PinnedMemory</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/TimothyMeadows/PinnedMemory</RepositoryUrl>
+    <RepositoryType>Github</RepositoryType>
+    <Version>1.0.1</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
+  </ItemGroup>
 
 </Project>
