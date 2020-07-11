@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30128.74
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PinnedMemory", "PinnedMemory\PinnedMemory.csproj", "{772ECA44-F729-4A33-BE01-CAECBD6027F0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PinnedMemory", "PinnedMemory\PinnedMemory.csproj", "{772ECA44-F729-4A33-BE01-CAECBD6027F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PinnedMemory.Examples", "PinnedMemory.Examples\PinnedMemory.Examples.csproj", "{CEF0410B-0F2D-4246-97F3-2D6987058AFF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{772ECA44-F729-4A33-BE01-CAECBD6027F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{772ECA44-F729-4A33-BE01-CAECBD6027F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{772ECA44-F729-4A33-BE01-CAECBD6027F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
