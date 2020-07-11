@@ -1,4 +1,5 @@
 # PinnedMemory
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![nuget](https://img.shields.io/nuget/v/PinnedMemory.svg)](https://www.nuget.org/packages/PinnedMemory/)
 
 PinnedMemory is a cross platform method for creating, and accessing pinned, and locked memory for Windows, Mac, and Linux operating systems in .NET Core.
 
