@@ -127,6 +127,21 @@ namespace PinnedMemory
                 _memory.Lock(pointer, context);
         }
 
+        public T[] Read()
+        {
+            return _buffer;
+        }
+
+        public T Read(int index)
+        {
+            return _buffer[index];
+        }
+
+        public void Write(int index, T value)
+        {
+            _buffer[index] = value;
+        }
+
         public PinnedMemory<T> Clone()
         {
             var buffer = (T[])_buffer.Clone();
