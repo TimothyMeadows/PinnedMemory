@@ -1,15 +1,10 @@
-﻿/*
- * Based on original idea found here:
- * https://stackoverflow.com/questions/1166952/net-secure-memory-structures/38552838#38552838
- * Linux, and OSX improvements implemented from here:
- * https://github.com/mheyman/Isopoh.Cryptography.Argon2/tree/master/Isopoh.Cryptography.SecureArray
- */
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Security;
+using System.Buffers;
 
 namespace PinnedMemory
 {
@@ -39,10 +34,14 @@ namespace PinnedMemory
         private readonly bool _locked;
         private readonly MemoryBase _memory;
         private readonly object _lock = new object();
+        private static readonly ArrayPool<T> _pool = ArrayPool<T>.Shared;
+        private bool _disposed = false;
 
         public T this[int i]
         {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get => _buffer[i];
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             set => _buffer[i] = value;
         }
 
@@ -50,77 +49,35 @@ namespace PinnedMemory
 
         public PinnedMemory(T[] value, bool zero = true, bool locked = true, SystemType type = SystemType.Unknown)
         {
-            if (!Types.ContainsKey(typeof(T)))
+            if (!Types.TryGetValue(typeof(T), out _size))
                 throw new ArrayTypeMismatchException(
                     $"{nameof(T)} is not a supported pinned memory type. Supported types are: {string.Join(", ", Types.Keys.Select(t => t.Name))}");
 
-            _buffer = value;
+            _buffer = _pool.Rent(value.Length);
+            Array.Copy(value, _buffer, value.Length);
             Length = value.Length;
             _locked = locked;
-            Types.TryGetValue(typeof(T), out _size);
 
-            IntPtr pointer;
-            UIntPtr context;
-            switch (type)
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                case SystemType.Windows:
-                    _memory = new WindowsMemory();
-                    break;
-                case SystemType.Linux:
-                    _memory = new LinuxMemory();
-                    break;
-                case SystemType.Osx:
-                    _memory = new OsxMemory();
-                    break;
-                default: // Find via try / fail
-                    lock (_lock)
-                    {
-                        var buffer = new byte[1];
-                        var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-                        try
-                        {
-                            pointer = handle.AddrOfPinnedObject();
-                            context = new UIntPtr(1);
-
-                            try
-                            {
-                                _memory = new WindowsMemory();
-                                _memory.Zero(pointer, context);
-                            }
-                            catch (DllNotFoundException)
-                            {
-                                try
-                                {
-                                    _memory = new LinuxMemory();
-                                    _memory.Zero(pointer, context);
-                                }
-                                catch (DllNotFoundException)
-                                {
-                                    try
-                                    {
-                                        _memory = new OsxMemory();
-                                        _memory.Zero(pointer, context);
-                                    }
-                                    catch (DllNotFoundException)
-                                    {
-                                        throw new NotSupportedException(
-                                            "No pinned memory support for current operating system");
-                                    }
-                                }
-                            }
-                        }
-                        finally
-                        {
-                            handle.Free();
-                        }
-
-                        break;
-                    }
+                _memory = new WindowsMemory();
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                _memory = new LinuxMemory();
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                _memory = new OsxMemory();
+            }
+            else
+            {
+                throw new NotSupportedException("No pinned memory support for current operating system");
             }
 
-            _handle = GCHandle.Alloc(value, GCHandleType.Pinned);
-            pointer = _handle.AddrOfPinnedObject();
-            context = new UIntPtr((uint)(_size * Length));
+            _handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
+            var pointer = _handle.AddrOfPinnedObject();
+            var context = new UIntPtr((uint)(_size * Length));
 
             if (zero)
                 _memory.Zero(pointer, context);
@@ -128,16 +85,19 @@ namespace PinnedMemory
                 _memory.Lock(pointer, context);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T[] Read()
         {
             return _buffer;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T Read(int index)
         {
             return _buffer[index];
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Write(int index, T value)
         {
             _buffer[index] = value;
@@ -145,7 +105,12 @@ namespace PinnedMemory
 
         public PinnedMemory<T> Clone()
         {
-            var buffer = (T[])_buffer.Clone();
+            var buffer = new T[Length];
+            if (typeof(T).IsPrimitive)
+                Buffer.BlockCopy(_buffer, 0, buffer, 0, _buffer.Length * _size);
+            else
+                Array.Copy(_buffer, buffer, _buffer.Length);
+
             return new PinnedMemory<T>(buffer, false);
         }
 
@@ -161,22 +126,27 @@ namespace PinnedMemory
 
         public void Dispose()
         {
-            if (_handle == default(GCHandle))
+            if (_disposed)
                 return;
 
-            try
+            if (_handle.IsAllocated)
             {
-                var pointer = _handle.AddrOfPinnedObject();
-                var context = new UIntPtr((uint)(_size * Length));
+                try
+                {
+                    var pointer = _handle.AddrOfPinnedObject();
+                    var context = new UIntPtr((uint)(_size * Length));
 
-                _memory.Zero(pointer, context);
-                if (_locked)
-                    _memory.Unlock(pointer, context);
+                    _memory.Zero(pointer, context);
+                    if (_locked)
+                        _memory.Unlock(pointer, context);
+                }
+                finally
+                {
+                    _handle.Free();
+                    _pool.Return(_buffer);
+                }
             }
-            finally
-            {
-                _handle.Free();
-            }
+            _disposed = true;
         }
     }
 }
