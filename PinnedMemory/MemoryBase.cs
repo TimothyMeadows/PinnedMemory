@@ -11,7 +11,7 @@ namespace PinnedMemory
 {
     public class MemoryBase
     {
-        public MemoryBase(Action<IntPtr, UIntPtr> zeroed, Func<IntPtr, UIntPtr, string> locked, Action<IntPtr, UIntPtr> unlocked)
+        public MemoryBase(Action<IntPtr, UIntPtr> zeroed, Func<IntPtr, UIntPtr, string?> locked, Action<IntPtr, UIntPtr> unlocked)
         {
             Zero = zeroed;
             Lock = locked;
@@ -19,7 +19,7 @@ namespace PinnedMemory
         }
 
         public Action<IntPtr, UIntPtr> Zero { get; protected set; }
-        public Func<IntPtr, UIntPtr, string> Lock { get; protected set; }
+        public Func<IntPtr, UIntPtr, string?> Lock { get; protected set; }
         public Action<IntPtr, UIntPtr> Unlock { get; protected set; }
     }
 }
