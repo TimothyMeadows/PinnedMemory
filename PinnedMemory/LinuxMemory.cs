@@ -47,7 +47,7 @@ namespace PinnedMemory
         {
         }
 
-        private static string LinuxLockMemory(IntPtr m, UIntPtr l)
+        private static string? LinuxLockMemory(IntPtr m, UIntPtr l)
         {
             if (LinuxMlock(m, l) != 0)
             {
@@ -102,7 +102,7 @@ namespace PinnedMemory
             return success;
         }
 
-        private static string LinuxStrError(int errno)
+        private static string? LinuxStrError(int errno)
         {
             var buf = new byte[256];
             var bufHandle = GCHandle.Alloc(buf, GCHandleType.Pinned);

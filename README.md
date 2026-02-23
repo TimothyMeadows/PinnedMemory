@@ -41,6 +41,10 @@ This gives you a safer lifecycle for sensitive data and a predictable address fo
 
 ---
 
+## Target framework
+
+This project targets **.NET 8** (`net8.0`) by default.
+
 ## Install
 
 ### .NET CLI

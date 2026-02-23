@@ -17,9 +17,9 @@ namespace PinnedMemory
         private static readonly object SetProcessWorkingSetSizeLock = new object();
         private static readonly object VirtualAllocLock = new object();
         private static bool? _is32BitSubsystem;
-        private static GetProcessWorkingSetSizeExDelegate _getProcessWorkingSetSize;
-        private static Func<IntPtr, ulong, ulong, uint, bool> _setProcessWorkingSetSize;
-        private static Func<IntPtr, ulong, uint, uint, IntPtr> _virtualAlloc;
+        private static GetProcessWorkingSetSizeExDelegate? _getProcessWorkingSetSize;
+        private static Func<IntPtr, ulong, ulong, uint, bool>? _setProcessWorkingSetSize;
+        private static Func<IntPtr, ulong, uint, uint, IntPtr>? _virtualAlloc;
 
         [DllImport("psapi.dll", CallingConvention = CallingConvention.Winapi, SetLastError = true)]
         private static extern bool GetProcessMemoryInfo(IntPtr hProcess, out ProcessMemoryCounters counters, uint size);

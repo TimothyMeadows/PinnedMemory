@@ -1,178 +1,205 @@
-﻿using System;
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Security;
-using System.Buffers;
 
-namespace PinnedMemory
+namespace PinnedMemory;
+
+public sealed class PinnedMemory<T> : IDisposable where T : struct
 {
-    public class PinnedMemory<T> : IDisposable where T : struct
+    private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
+    private static readonly OSPlatform IosPlatform = OSPlatform.Create("IOS");
+
+    private static readonly IReadOnlyDictionary<Type, int> s_types = new Dictionary<Type, int>
     {
-        private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
-        private static readonly OSPlatform IosPlatform = OSPlatform.Create("IOS");
+        { typeof(sbyte), sizeof(sbyte) },
+        { typeof(byte), sizeof(byte) },
+        { typeof(char), sizeof(char) },
+        { typeof(short), sizeof(short) },
+        { typeof(ushort), sizeof(ushort) },
+        { typeof(int), sizeof(int) },
+        { typeof(uint), sizeof(uint) },
+        { typeof(long), sizeof(long) },
+        { typeof(ulong), sizeof(ulong) },
+        { typeof(float), sizeof(float) },
+        { typeof(double), sizeof(double) },
+        { typeof(decimal), sizeof(decimal) },
+        { typeof(bool), sizeof(bool) }
+    };
 
-        public static Dictionary<Type, int> Types =>
-            new Dictionary<Type, int>
-            {
-                {typeof(sbyte), sizeof(sbyte)},
-                {typeof(byte), sizeof(byte)},
-                {typeof(char), sizeof(char)},
-                {typeof(short), sizeof(short)},
-                {typeof(ushort), sizeof(ushort)},
-                {typeof(int), sizeof(int)},
-                {typeof(uint), sizeof(uint)},
-                {typeof(long), sizeof(long)},
-                {typeof(ulong), sizeof(ulong)},
-                {typeof(float), sizeof(float)},
-                {typeof(double), sizeof(double)},
-                {typeof(decimal), sizeof(decimal)},
-                {typeof(bool), sizeof(bool)}
-            };
+    public static IReadOnlyDictionary<Type, int> Types => s_types;
 
-        private GCHandle _handle;
-        private readonly T[] _buffer;
-        private readonly int _size;
-        private readonly bool _locked;
-        private readonly MemoryBase _memory;
-        private readonly object _lock = new object();
-        private static readonly ArrayPool<T> _pool = ArrayPool<T>.Shared;
-        private bool _disposed = false;
+    private static readonly ArrayPool<T> Pool = ArrayPool<T>.Shared;
 
-        public T this[int i]
+    private GCHandle _handle;
+    private readonly T[] _buffer;
+    private readonly int _size;
+    private readonly bool _locked;
+    private readonly MemoryBase _memory;
+    private bool _disposed;
+
+    public T this[int i]
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _buffer[i];
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            set => _buffer[i] = value;
+            ThrowIfDisposed();
+            return _buffer[i];
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        set
+        {
+            ThrowIfDisposed();
+            _buffer[i] = value;
+        }
+    }
+
+    public int Length { get; }
+
+    public PinnedMemory(T[] value, bool zero = true, bool locked = true, SystemType type = SystemType.Unknown)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (!Types.TryGetValue(typeof(T), out _size))
+        {
+            throw new ArrayTypeMismatchException(
+                $"{nameof(T)} is not a supported pinned memory type. Supported types are: {string.Join(", ", Types.Keys.Select(t => t.Name))}");
         }
 
-        public int Length { get; }
+        _buffer = Pool.Rent(value.Length);
+        Array.Copy(value, _buffer, value.Length);
+        Length = value.Length;
+        _locked = locked;
+        _memory = CreateMemory(type, RuntimeInformation.IsOSPlatform);
 
-        public PinnedMemory(T[] value, bool zero = true, bool locked = true, SystemType type = SystemType.Unknown)
+        _handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
+        var pointer = _handle.AddrOfPinnedObject();
+        var context = new UIntPtr((uint)(_size * Length));
+
+        if (zero)
+            _memory.Zero(pointer, context);
+        if (_locked)
+            _memory.Lock(pointer, context);
+    }
+
+    internal static SystemType ResolveSystemType(SystemType type, Func<OSPlatform, bool> isOsPlatform)
+    {
+        if (type != SystemType.Unknown)
+            return type;
+
+        if (isOsPlatform(OSPlatform.Windows))
+            return SystemType.Windows;
+        if (isOsPlatform(OSPlatform.Linux))
+            return SystemType.Linux;
+        if (isOsPlatform(OSPlatform.OSX))
+            return SystemType.Osx;
+        if (isOsPlatform(AndroidPlatform))
+            return SystemType.Android;
+        if (isOsPlatform(IosPlatform))
+            return SystemType.Ios;
+
+        return SystemType.Unknown;
+    }
+
+    internal static MemoryBase CreateMemory(SystemType type, Func<OSPlatform, bool> isOsPlatform)
+    {
+        var resolvedType = ResolveSystemType(type, isOsPlatform);
+        return resolvedType switch
         {
-            if (!Types.TryGetValue(typeof(T), out _size))
-                throw new ArrayTypeMismatchException(
-                    $"{nameof(T)} is not a supported pinned memory type. Supported types are: {string.Join(", ", Types.Keys.Select(t => t.Name))}");
+            SystemType.Windows => new WindowsMemory(),
+            SystemType.Linux => new LinuxMemory(),
+            SystemType.Osx => new OsxMemory(),
+            SystemType.Android => new AndroidMemory(),
+            SystemType.Ios => new IosMemory(),
+            _ => throw new NotSupportedException("No pinned memory support for current operating system")
+        };
+    }
 
-            _buffer = _pool.Rent(value.Length);
-            Array.Copy(value, _buffer, value.Length);
-            Length = value.Length;
-            _locked = locked;
-            _memory = CreateMemory(type, RuntimeInformation.IsOSPlatform);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T[] Read()
+    {
+        ThrowIfDisposed();
+        return _buffer;
+    }
 
-            _handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-            var pointer = _handle.AddrOfPinnedObject();
-            var context = new UIntPtr((uint)(_size * Length));
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public T Read(int index)
+    {
+        ThrowIfDisposed();
+        return _buffer[index];
+    }
 
-            if (zero)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Write(int index, T value)
+    {
+        ThrowIfDisposed();
+        _buffer[index] = value;
+    }
+
+    public PinnedMemory<T> Clone()
+    {
+        ThrowIfDisposed();
+
+        var buffer = new T[Length];
+        if (typeof(T).IsPrimitive)
+            Buffer.BlockCopy(_buffer, 0, buffer, 0, _buffer.Length * _size);
+        else
+            Array.Copy(_buffer, buffer, _buffer.Length);
+
+        return new PinnedMemory<T>(buffer, false);
+    }
+
+    public T[] ToArray()
+    {
+        ThrowIfDisposed();
+        return _buffer;
+    }
+
+    public override string ToString() => throw new SecurityException("Can't be expressed as String.");
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    ~PinnedMemory()
+    {
+        Dispose(disposing: false);
+    }
+
+    private void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (_handle.IsAllocated)
+        {
+            try
+            {
+                var pointer = _handle.AddrOfPinnedObject();
+                var context = new UIntPtr((uint)(_size * Length));
+
                 _memory.Zero(pointer, context);
-            if (_locked)
-                _memory.Lock(pointer, context);
-        }
-
-        internal static SystemType ResolveSystemType(SystemType type, Func<OSPlatform, bool> isOsPlatform)
-        {
-            if (type != SystemType.Unknown)
-                return type;
-
-            if (isOsPlatform(OSPlatform.Windows))
-                return SystemType.Windows;
-            if (isOsPlatform(OSPlatform.Linux))
-                return SystemType.Linux;
-            if (isOsPlatform(OSPlatform.OSX))
-                return SystemType.Osx;
-            if (isOsPlatform(AndroidPlatform))
-                return SystemType.Android;
-            if (isOsPlatform(IosPlatform))
-                return SystemType.Ios;
-
-            return SystemType.Unknown;
-        }
-
-        internal static MemoryBase CreateMemory(SystemType type, Func<OSPlatform, bool> isOsPlatform)
-        {
-            var resolvedType = ResolveSystemType(type, isOsPlatform);
-            switch (resolvedType)
+                if (_locked)
+                    _memory.Unlock(pointer, context);
+            }
+            finally
             {
-                case SystemType.Windows:
-                    return new WindowsMemory();
-                case SystemType.Linux:
-                    return new LinuxMemory();
-                case SystemType.Osx:
-                    return new OsxMemory();
-                case SystemType.Android:
-                    return new AndroidMemory();
-                case SystemType.Ios:
-                    return new IosMemory();
-                default:
-                    throw new NotSupportedException("No pinned memory support for current operating system");
+                _handle.Free();
+                Pool.Return(_buffer, clearArray: true);
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T[] Read()
-        {
-            return _buffer;
-        }
+        _disposed = true;
+    }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T Read(int index)
-        {
-            return _buffer[index];
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Write(int index, T value)
-        {
-            _buffer[index] = value;
-        }
-
-        public PinnedMemory<T> Clone()
-        {
-            var buffer = new T[Length];
-            if (typeof(T).IsPrimitive)
-                Buffer.BlockCopy(_buffer, 0, buffer, 0, _buffer.Length * _size);
-            else
-                Array.Copy(_buffer, buffer, _buffer.Length);
-
-            return new PinnedMemory<T>(buffer, false);
-        }
-
-        public T[] ToArray()
-        {
-            return _buffer;
-        }
-
-        public override string ToString()
-        {
-            throw new SecurityException("Can't be expressed as String.");
-        }
-
-        public void Dispose()
-        {
-            if (_disposed)
-                return;
-
-            if (_handle.IsAllocated)
-            {
-                try
-                {
-                    var pointer = _handle.AddrOfPinnedObject();
-                    var context = new UIntPtr((uint)(_size * Length));
-
-                    _memory.Zero(pointer, context);
-                    if (_locked)
-                        _memory.Unlock(pointer, context);
-                }
-                finally
-                {
-                    _handle.Free();
-                    _pool.Return(_buffer);
-                }
-            }
-            _disposed = true;
-        }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }
