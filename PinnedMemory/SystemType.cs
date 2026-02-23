@@ -5,6 +5,8 @@
         Unknown = 0,
         Windows = 1,
         Linux = 2,
-        Osx = 3
+        Osx = 3,
+        Android = 4,
+        Ios = 5
     }
 }

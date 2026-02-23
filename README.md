@@ -68,6 +68,8 @@ Install-Package PinnedMemory
 - Windows
 - Linux
 - macOS
+- Android
+- iOS
 
 ### Supported `T` element types
 
@@ -124,7 +126,7 @@ PinnedMemory(T[] value, bool zero = true, bool locked = true, SystemType type = 
 - `locked`:
   - `true` (default): attempts OS-level page lock.
   - `false`: skip lock attempt.
-- `type`: currently not required for runtime behavior; OS is detected automatically.
+- `type`: optional explicit OS selection (`Windows`, `Linux`, `Osx`, `Android`, `Ios`); when `Unknown`, OS is detected automatically at runtime.
 
 ### Important lifecycle semantics
 
