@@ -1,102 +1,75 @@
-
 # PinnedMemory
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![nuget](https://img.shields.io/nuget/v/PinnedMemory.svg)](https://www.nuget.org/packages/PinnedMemory/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![nuget](https://img.shields.io/nuget/v/PinnedMemory.svg)](https://www.nuget.org/packages/PinnedMemory/)
 
-**PinnedMemory** is a cross-platform, high-performance solution for creating, accessing, and managing pinned and locked memory for Windows, macOS, and Linux operating systems in .NET Core. It provides automatic memory pinning and optional locking for sensitive operations, helping you prevent garbage collection relocations and offering enhanced performance in low-level memory manipulation scenarios.
+`PinnedMemory` is a lightweight .NET library for handling sensitive or performance-critical arrays that should stay pinned in memory, be zeroed, and optionally be memory-locked at the OS level.
 
-# Install
+It is designed for scenarios such as:
 
-From a command prompt:
+- handling secrets in byte/char buffers,
+- passing stable pointers to native interop,
+- reducing GC relocation concerns for low-level memory operations.
+
+---
+
+## Table of Contents
+
+- [Why use PinnedMemory?](#why-use-pinnedmemory)
+- [Install](#install)
+- [Supported platforms and types](#supported-platforms-and-types)
+- [Quick start](#quick-start)
+- [API behavior at a glance](#api-behavior-at-a-glance)
+- [Usage patterns](#usage-patterns)
+- [Security and correctness best practices](#security-and-correctness-best-practices)
+- [Performance notes](#performance-notes)
+- [Common pitfalls](#common-pitfalls)
+- [FAQ](#faq)
+- [License](#license)
+
+---
+
+## Why use PinnedMemory?
+
+When managed arrays are not pinned, the GC may move them. `PinnedMemory<T>` pins an array for the lifetime of the object and can also:
+
+- **zero** the buffer,
+- **lock** memory pages (platform permitting),
+- **zero + unlock on dispose**.
+
+This gives you a safer lifecycle for sensitive data and a predictable address for native interop work.
+
+---
+
+## Install
+
+### .NET CLI
 
 ```bash
 dotnet add package PinnedMemory
 ```
 
-```bash
+### Package Manager Console
+
+```powershell
 Install-Package PinnedMemory
 ```
 
-You can also search for the package via your NuGet UI or website:
+### NuGet
 
-[NuGet: PinnedMemory](https://www.nuget.org/packages/PinnedMemory/)
+- https://www.nuget.org/packages/PinnedMemory/
 
-# Features
+---
 
-- Cross-platform memory management for Windows, Linux, and macOS.
-- Supports several primitive types (e.g., `byte`, `int`, `float`, etc.).
-- Offers zeroing, locking, and unlocking of memory for security and performance.
-- Prevents garbage collection from relocating memory by pinning the array in memory.
-- Efficient cloning and pooling of arrays using `ArrayPool<T>`.
-- Optimized for performance with aggressive inlining and reduced allocations.
+## Supported platforms and types
 
-# Usage
+### Platforms
 
-### Basic Example
+- Windows
+- Linux
+- macOS
 
-```csharp
-using (var pin = new PinnedMemory<byte>(new byte[3]))
-{
-    pin[0] = 65;
-    pin[1] = 61;
-    pin[2] = 77;
-}
-```
-
-### Writing to Memory
-
-```csharp
-using (var pin = new PinnedMemory<byte>(new byte[3]))
-{
-    pin.Write(0, 65);
-    pin.Write(1, 61);
-    pin.Write(2, 77);
-}
-```
-
-### Reading from Memory
-
-```csharp
-using (var pin = new PinnedMemory<byte>(new byte[] {65, 61, 77}, false))
-{
-    var byte1 = pin[0];
-    var byte2 = pin[1];
-    var byte3 = pin[2];
-}
-```
-
-```csharp
-using (var pin = new PinnedMemory<byte>(new byte[] {65, 61, 77}, false))
-{
-    var byte1 = pin.Read(0);
-    var byte2 = pin.Read(1);
-    var byte3 = pin.Read(2);
-}
-```
-
-### Cloning Pinned Memory
-
-```csharp
-using (var pin = new PinnedMemory<byte>(new byte[] {65, 61, 77}, false))
-{
-    var clone = pin.Clone();
-    var clonedArray = clone.ToArray();
-}
-```
-
-### Zeroing, Locking, and Unlocking Memory
-
-```csharp
-using (var pin = new PinnedMemory<byte>(new byte[3], zero: true, locked: true))
-{
-    // Memory is automatically zeroed and locked.
-    // Perform secure operations.
-}
-```
-
-### Supported Types
-
-The following primitive types are supported in `PinnedMemory`:
+### Supported `T` element types
 
 - `sbyte`
 - `byte`
@@ -112,7 +85,31 @@ The following primitive types are supported in `PinnedMemory`:
 - `decimal`
 - `bool`
 
-# API Reference
+If you use an unsupported `struct`, construction throws `ArrayTypeMismatchException`.
+
+---
+
+## Quick start
+
+```csharp
+using PinnedMemory;
+
+var bytes = new byte[32];
+
+using var secret = new PinnedMemory<byte>(bytes);
+
+secret[0] = 0x41;
+secret.Write(1, 0x42);
+
+var first = secret.Read(0);
+var copy = secret.ToArray();
+```
+
+> By default, construction uses `zero: true` and `locked: true`.
+
+---
+
+## API behavior at a glance
 
 ### Constructor
 
@@ -120,25 +117,145 @@ The following primitive types are supported in `PinnedMemory`:
 PinnedMemory(T[] value, bool zero = true, bool locked = true, SystemType type = SystemType.Unknown)
 ```
 
-- **value**: The array to pin in memory.
-- **zero**: Optional. If `true`, the memory will be zeroed out after allocation.
-- **locked**: Optional. If `true`, the memory will be locked in RAM to prevent paging.
-- **type**: Optional. Specifies the OS platform (`SystemType.Windows`, `SystemType.Linux`, `SystemType.Osx`). If `Unknown`, it is detected automatically.
+- `value`: source array copied into an internal pooled buffer.
+- `zero`:
+  - `true` (default): internal memory is zeroed immediately after allocation.
+  - `false`: initial contents are preserved.
+- `locked`:
+  - `true` (default): attempts OS-level page lock.
+  - `false`: skip lock attempt.
+- `type`: currently not required for runtime behavior; OS is detected automatically.
 
-### Properties
+### Important lifecycle semantics
 
-- **T this[int i]**: Indexer for accessing elements in the pinned array.
-- **int Length**: Returns the length of the pinned array.
+- Construction rents an internal buffer from `ArrayPool<T>.Shared`.
+- `Dispose()`:
+  - zeroes internal memory,
+  - unlocks if locking was requested,
+  - frees the pin handle,
+  - returns the buffer to the pool.
 
-### Methods
+### Members
 
-- **T[] Read()**: Returns the entire pinned array.
-- **T Read(int index)**: Reads the value at the specified index.
-- **void Write(int index, T value)**: Writes the value at the specified index.
-- **PinnedMemory<T> Clone()**: Clones the pinned memory array and returns a new `PinnedMemory<T>` object.
-- **T[] ToArray()**: Returns a copy of the pinned memory as an array.
-- **void Dispose()**: Frees the pinned memory, zeroes it out, and unlocks it if locked.
+- `Length`: logical length from the original input array.
+- Indexer `this[int i]`: get/set values.
+- `Read()`: returns internal buffer reference.
+- `Read(int index)`: read one value.
+- `Write(int index, T value)`: write one value.
+- `ToArray()`: returns internal buffer reference.
+- `Clone()`: deep-copies into a new `PinnedMemory<T>`.
 
-# License
+---
 
-This library is licensed under the [MIT License](https://opensource.org/licenses/MIT).
+## Usage patterns
+
+### 1) Preserve initial bytes on creation
+
+Use `zero: false` when you provide meaningful input data.
+
+```csharp
+using var pin = new PinnedMemory<byte>(new byte[] { 0x10, 0x20, 0x30 }, zero: false);
+```
+
+### 2) Build value incrementally
+
+Keep default `zero: true` and fill explicitly.
+
+```csharp
+using var pin = new PinnedMemory<byte>(new byte[3]);
+pin[0] = 65;
+pin[1] = 61;
+pin[2] = 77;
+```
+
+### 3) Clone for isolated lifecycle
+
+```csharp
+using var original = new PinnedMemory<byte>(new byte[] { 1, 2, 3 }, zero: false);
+using var clone = original.Clone();
+```
+
+### 4) `char[]` for sensitive text-like data
+
+```csharp
+using var text = new PinnedMemory<char>(new[] { 's', 'e', 'c', 'r', 'e', 't' }, zero: false);
+```
+
+Prefer `char[]`/`byte[]` over `string` when handling secrets.
+
+---
+
+## Security and correctness best practices
+
+1. **Always dispose promptly**
+   - Use `using` / `using var`.
+   - Do not rely on process shutdown for cleanup.
+
+2. **Choose `zero` intentionally**
+   - `zero: true` for allocate-then-populate flows.
+   - `zero: false` for pre-populated input arrays.
+
+3. **Avoid converting secrets to `string`**
+   - `string` is immutable and not controllably zeroable.
+   - Keep secrets in pinned `byte[]`/`char[]` as long as possible.
+
+4. **Minimize copies**
+   - `Read()`/`ToArray()` expose the internal buffer reference.
+   - If you copy data elsewhere, you now have additional memory to scrub.
+
+5. **Treat locking as best effort**
+   - OS lock calls can be constrained by permissions/limits.
+   - Keep least-privilege defaults in deployment (e.g., memlock limits on Linux).
+
+6. **Do not access after dispose**
+   - The underlying buffer is returned to `ArrayPool<T>`.
+   - Retained references can observe reused data from other code.
+
+7. **Keep scope small**
+   - Hold pinned memory only for the shortest practical duration.
+   - Long-lived pinned regions can negatively affect GC behavior.
+
+---
+
+## Performance notes
+
+- The library uses `ArrayPool<T>.Shared` to reduce allocation pressure.
+- Pinning and OS page-locking have costs; use only where justified.
+- For small, frequent operations, benchmark your real workload with and without locking.
+
+---
+
+## Common pitfalls
+
+- **“My provided bytes are all zero.”**
+  - You likely used default `zero: true`.
+  - Set `zero: false` when preserving initial values.
+
+- **“I used `ToArray()` then disposed, but still read old reference.”**
+  - `ToArray()` returns internal buffer reference, not a defensive copy.
+  - Do not keep references past disposal.
+
+- **“Can I call `ToString()` to inspect data?”**
+  - No. `ToString()` intentionally throws `SecurityException`.
+
+---
+
+## FAQ
+
+### Is this a replacement for cryptographic key vaulting/HSMs?
+
+No. It helps memory hygiene inside your process. It is not a full secret-management system.
+
+### Is memory lock guaranteed?
+
+No. Locking is platform- and permission-dependent.
+
+### Is `PinnedMemory<T>` thread-safe?
+
+No explicit thread-safety guarantees are provided. Synchronize concurrent access at the caller boundary.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
