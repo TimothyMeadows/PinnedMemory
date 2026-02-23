@@ -10,6 +10,9 @@ namespace PinnedMemory
 {
     public class PinnedMemory<T> : IDisposable where T : struct
     {
+        private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
+        private static readonly OSPlatform IosPlatform = OSPlatform.Create("IOS");
+
         public static Dictionary<Type, int> Types =>
             new Dictionary<Type, int>
             {
@@ -57,23 +60,7 @@ namespace PinnedMemory
             Array.Copy(value, _buffer, value.Length);
             Length = value.Length;
             _locked = locked;
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                _memory = new WindowsMemory();
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                _memory = new LinuxMemory();
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                _memory = new OsxMemory();
-            }
-            else
-            {
-                throw new NotSupportedException("No pinned memory support for current operating system");
-            }
+            _memory = CreateMemory(type, RuntimeInformation.IsOSPlatform);
 
             _handle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
             var pointer = _handle.AddrOfPinnedObject();
@@ -83,6 +70,45 @@ namespace PinnedMemory
                 _memory.Zero(pointer, context);
             if (_locked)
                 _memory.Lock(pointer, context);
+        }
+
+        internal static SystemType ResolveSystemType(SystemType type, Func<OSPlatform, bool> isOsPlatform)
+        {
+            if (type != SystemType.Unknown)
+                return type;
+
+            if (isOsPlatform(OSPlatform.Windows))
+                return SystemType.Windows;
+            if (isOsPlatform(OSPlatform.Linux))
+                return SystemType.Linux;
+            if (isOsPlatform(OSPlatform.OSX))
+                return SystemType.Osx;
+            if (isOsPlatform(AndroidPlatform))
+                return SystemType.Android;
+            if (isOsPlatform(IosPlatform))
+                return SystemType.Ios;
+
+            return SystemType.Unknown;
+        }
+
+        internal static MemoryBase CreateMemory(SystemType type, Func<OSPlatform, bool> isOsPlatform)
+        {
+            var resolvedType = ResolveSystemType(type, isOsPlatform);
+            switch (resolvedType)
+            {
+                case SystemType.Windows:
+                    return new WindowsMemory();
+                case SystemType.Linux:
+                    return new LinuxMemory();
+                case SystemType.Osx:
+                    return new OsxMemory();
+                case SystemType.Android:
+                    return new AndroidMemory();
+                case SystemType.Ios:
+                    return new IosMemory();
+                default:
+                    throw new NotSupportedException("No pinned memory support for current operating system");
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

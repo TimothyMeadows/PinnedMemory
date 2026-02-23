@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PinnedMemory", "PinnedMemor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PinnedMemory.Examples", "PinnedMemory.Examples\PinnedMemory.Examples.csproj", "{CEF0410B-0F2D-4246-97F3-2D6987058AFF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PinnedMemory.Tests", "PinnedMemory.Tests\PinnedMemory.Tests.csproj", "{60406976-DEEB-40C7-A23B-3DE02C43FDAB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CEF0410B-0F2D-4246-97F3-2D6987058AFF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{60406976-DEEB-40C7-A23B-3DE02C43FDAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{60406976-DEEB-40C7-A23B-3DE02C43FDAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{60406976-DEEB-40C7-A23B-3DE02C43FDAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{60406976-DEEB-40C7-A23B-3DE02C43FDAB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
